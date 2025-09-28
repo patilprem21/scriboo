@@ -1,18 +1,24 @@
-import React, { useState } from 'react'
-import { Copy, Download, CheckCircle, AlertCircle, Clock } from 'lucide-react'
-
-interface ConnectionData {
-  code: string
-  data: string
-  status: 'waiting' | 'connected' | 'sent'
-}
+import React, { useState, useRef, useEffect } from 'react'
+import { Copy, Download, CheckCircle, AlertCircle, Clock, FileText, Image, Save } from 'lucide-react'
+import { WebRTCManager, SignalingManager, WebRTCData } from '../utils/webrtc'
 
 const ReceiveMode: React.FC = () => {
   const [code, setCode] = useState<string>('')
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'connecting' | 'connected' | 'received' | 'error'>('idle')
-  const [receivedData, setReceivedData] = useState<string>('')
+  const [receivedData, setReceivedData] = useState<WebRTCData | null>(null)
   const [copied, setCopied] = useState<boolean>(false)
-  const [, setConnections] = useState<Record<string, ConnectionData>>({})
+  const [transferProgress, setTransferProgress] = useState<number>(0)
+  
+  const webrtcManagerRef = useRef<WebRTCManager | null>(null)
+
+  useEffect(() => {
+    return () => {
+      // Cleanup WebRTC connection on unmount
+      if (webrtcManagerRef.current) {
+        webrtcManagerRef.current.close()
+      }
+    }
+  }, [])
 
   const connectToSender = async () => {
     if (code.length !== 6) {
@@ -22,29 +28,62 @@ const ReceiveMode: React.FC = () => {
     
     setConnectionStatus('connecting')
     
-    // Simulate connection check
-    setTimeout(() => {
-      // In a real app, this would check a server or use WebRTC
-      // For demo purposes, we'll simulate finding a connection
-      const mockConnection = {
-        code,
-        data: 'This is sample data from the sender! In a real app, this would be the actual data sent from the other device.',
-        status: 'sent' as const
-      }
+    try {
+      // Initialize WebRTC as receiver
+      webrtcManagerRef.current = new WebRTCManager({
+        onConnectionStateChange: (state) => {
+          console.log('Connection state:', state)
+          if (state === 'connected') {
+            setConnectionStatus('connected')
+          } else if (state === 'closed' || state === 'failed') {
+            setConnectionStatus('error')
+          }
+        },
+        onDataReceived: (data) => {
+          console.log('Data received:', data)
+          setReceivedData(data)
+          setConnectionStatus('received')
+          setTransferProgress(100)
+        },
+        onError: (error) => {
+          console.error('WebRTC error:', error)
+          setConnectionStatus('error')
+        },
+        onProgress: (progress) => {
+          setTransferProgress(progress)
+        }
+      })
+
+      await webrtcManagerRef.current.initialize(false)
       
-      if (Math.random() > 0.3) { // 70% success rate for demo
-        setConnections(prev => ({ ...prev, [code]: mockConnection }))
-        setReceivedData(mockConnection.data)
-        setConnectionStatus('received')
-      } else {
+      // Get offer from signaling server
+      const offer = await SignalingManager.getOffer(code)
+      if (!offer) {
         setConnectionStatus('error')
+        return
       }
-    }, 2000)
+
+      // Create answer
+      const answer = await webrtcManagerRef.current.createAnswer(offer)
+      await SignalingManager.sendAnswer(code, answer)
+      
+      setConnectionStatus('connected')
+    } catch (error) {
+      console.error('Error connecting:', error)
+      setConnectionStatus('error')
+    }
   }
 
   const copyReceivedData = async () => {
+    if (!receivedData) return
+    
     try {
-      await navigator.clipboard.writeText(receivedData)
+      if (receivedData.type === 'text') {
+        await navigator.clipboard.writeText(receivedData.content as string)
+      } else {
+        // For files, copy filename or show message
+        await navigator.clipboard.writeText(receivedData.filename || 'File received')
+      }
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
@@ -52,11 +91,35 @@ const ReceiveMode: React.FC = () => {
     }
   }
 
+  const downloadReceivedFile = () => {
+    if (!receivedData || receivedData.type === 'text') return
+
+    try {
+      const blob = new Blob([receivedData.content as ArrayBuffer], { 
+        type: receivedData.mimeType || 'application/octet-stream' 
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = receivedData.filename || 'received-file'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to download file:', error)
+    }
+  }
+
   const resetConnection = () => {
+    if (webrtcManagerRef.current) {
+      webrtcManagerRef.current.close()
+    }
     setCode('')
     setConnectionStatus('idle')
-    setReceivedData('')
+    setReceivedData(null)
     setCopied(false)
+    setTransferProgress(0)
   }
 
   const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,23 +201,99 @@ const ReceiveMode: React.FC = () => {
         </div>
       )}
 
+      {/* Transfer Progress */}
+      {transferProgress > 0 && transferProgress < 100 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+            <span>Receiving data...</span>
+            <span>{transferProgress}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div 
+              className="bg-success-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${transferProgress}%` }}
+            ></div>
+          </div>
+        </div>
+      )}
+
       {/* Received Data */}
       {receivedData && (
         <div className="mb-6">
           <div className="bg-success-50 border border-success-200 rounded-xl p-6">
-            <h3 className="font-semibold text-success-800 mb-3">Received Data:</h3>
-            <div className="bg-white rounded-lg p-4 border border-success-200">
-              <pre className="whitespace-pre-wrap text-gray-900 font-mono text-sm">
-                {receivedData}
-              </pre>
+            <div className="flex items-center gap-2 mb-3">
+              {receivedData.type === 'image' ? (
+                <Image size={20} className="text-blue-500" />
+              ) : receivedData.type === 'file' ? (
+                <FileText size={20} className="text-gray-500" />
+              ) : (
+                <FileText size={20} className="text-green-500" />
+              )}
+              <h3 className="font-semibold text-success-800">
+                {receivedData.type === 'text' ? 'Received Text:' : 
+                 receivedData.type === 'image' ? 'Received Image:' : 'Received File:'}
+              </h3>
             </div>
-            <button
-              onClick={copyReceivedData}
-              className="btn-secondary flex items-center gap-2 mt-4"
-            >
-              {copied ? <CheckCircle size={20} /> : <Copy size={20} />}
-              {copied ? 'Copied!' : 'Copy to Clipboard'}
-            </button>
+            
+            {receivedData.type === 'text' ? (
+              <div className="bg-white rounded-lg p-4 border border-success-200">
+                <pre className="whitespace-pre-wrap text-gray-900 font-mono text-sm">
+                  {receivedData.content as string}
+                </pre>
+              </div>
+            ) : receivedData.type === 'image' ? (
+              <div className="bg-white rounded-lg p-4 border border-success-200">
+                <img 
+                  src={URL.createObjectURL(new Blob([receivedData.content as ArrayBuffer], { type: receivedData.mimeType }))}
+                  alt="Received image"
+                  className="max-w-full h-auto rounded-lg"
+                />
+                <p className="text-sm text-gray-600 mt-2">
+                  {receivedData.filename} ({(receivedData.size! / 1024).toFixed(1)} KB)
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg p-4 border border-success-200">
+                <div className="flex items-center gap-2">
+                  <FileText size={20} className="text-gray-500" />
+                  <div>
+                    <p className="font-medium text-gray-900">{receivedData.filename}</p>
+                    <p className="text-sm text-gray-600">
+                      {(receivedData.size! / 1024).toFixed(1)} KB • {receivedData.mimeType}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div className="flex gap-2 mt-4">
+              {receivedData.type === 'text' ? (
+                <button
+                  onClick={copyReceivedData}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  {copied ? <CheckCircle size={20} /> : <Copy size={20} />}
+                  {copied ? 'Copied!' : 'Copy Text'}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={downloadReceivedFile}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    <Download size={20} />
+                    Download File
+                  </button>
+                  <button
+                    onClick={copyReceivedData}
+                    className="btn-secondary flex items-center gap-2"
+                  >
+                    {copied ? <CheckCircle size={20} /> : <Copy size={20} />}
+                    {copied ? 'Copied!' : 'Copy Name'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -178,9 +317,15 @@ const ReceiveMode: React.FC = () => {
           <li>1. Get the 6-digit code from the sender</li>
           <li>2. Enter the code in the input field above</li>
           <li>3. Click "Connect & Receive"</li>
-          <li>4. Wait for the data to appear</li>
-          <li>5. Copy the data to your clipboard</li>
+          <li>4. Wait for "Connected" status</li>
+          <li>5. Data will appear automatically when sent</li>
+          <li>6. Copy text or download files</li>
         </ol>
+        <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+          <p className="text-xs text-blue-800">
+            <strong>🔒 Privacy:</strong> Data transfers directly between devices. No storage, no servers, completely private!
+          </p>
+        </div>
       </div>
     </div>
   )

@@ -1,33 +1,90 @@
-import React, { useState } from 'react'
-import { Copy, Send, RefreshCw, CheckCircle, Clock } from 'lucide-react'
-
-interface ConnectionData {
-  code: string
-  data: string
-  status: 'waiting' | 'connected' | 'sent'
-}
+import React, { useState, useRef, useEffect } from 'react'
+import { Copy, Send, RefreshCw, CheckCircle, Clock, Upload, FileText, Image } from 'lucide-react'
+import { WebRTCManager, SignalingManager, WebRTCData } from '../utils/webrtc'
 
 const SendMode: React.FC = () => {
   const [generatedCode, setGeneratedCode] = useState<string>('')
   const [dataToSend, setDataToSend] = useState<string>('')
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'waiting' | 'connected' | 'sent'>('idle')
   const [copied, setCopied] = useState<boolean>(false)
-  const [, setConnections] = useState<Record<string, ConnectionData>>({})
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [transferProgress, setTransferProgress] = useState<number>(0)
+  
+  const webrtcManagerRef = useRef<WebRTCManager | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const generateCode = () => {
+  useEffect(() => {
+    return () => {
+      // Cleanup WebRTC connection on unmount
+      if (webrtcManagerRef.current) {
+        webrtcManagerRef.current.close()
+      }
+    }
+  }, [])
+
+  const generateCode = async () => {
     const code = Math.floor(100000 + Math.random() * 900000).toString()
     setGeneratedCode(code)
     setConnectionStatus('waiting')
     
-    // Initialize connection
-    setConnections(prev => ({
-      ...prev,
-      [code]: {
-        code,
-        data: '',
-        status: 'waiting'
+    try {
+      // Initialize WebRTC as initiator
+      webrtcManagerRef.current = new WebRTCManager({
+        onConnectionStateChange: (state) => {
+          console.log('Connection state:', state)
+          if (state === 'connected') {
+            setConnectionStatus('connected')
+          } else if (state === 'closed' || state === 'failed') {
+            setConnectionStatus('idle')
+          }
+        },
+        onDataReceived: (data) => {
+          console.log('Data received:', data)
+        },
+        onError: (error) => {
+          console.error('WebRTC error:', error)
+          setConnectionStatus('idle')
+        },
+        onProgress: (progress) => {
+          setTransferProgress(progress)
+        }
+      })
+
+      await webrtcManagerRef.current.initialize(true)
+      const offer = await webrtcManagerRef.current.createOffer()
+      await SignalingManager.sendOffer(code, offer)
+      
+      // Start polling for answer
+      pollForAnswer(code)
+    } catch (error) {
+      console.error('Error initializing WebRTC:', error)
+      setConnectionStatus('idle')
+    }
+  }
+
+  const pollForAnswer = async (code: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const answer = await SignalingManager.getAnswer(code)
+        if (answer && webrtcManagerRef.current) {
+          clearInterval(pollInterval)
+          await webrtcManagerRef.current.setAnswer(answer)
+          setConnectionStatus('connected')
+        }
+      } catch (error) {
+        console.error('Error polling for answer:', error)
+        clearInterval(pollInterval)
+        setConnectionStatus('idle')
       }
-    }))
+    }, 1000)
+
+    // Stop polling after 2 minutes
+    setTimeout(() => {
+      clearInterval(pollInterval)
+      if (connectionStatus === 'waiting') {
+        setConnectionStatus('idle')
+      }
+    }, 120000)
   }
 
   const copyCode = async () => {
@@ -41,33 +98,78 @@ const SendMode: React.FC = () => {
   }
 
   const sendData = () => {
-    if (!dataToSend.trim()) {
-      alert('Please enter some text or link to send!')
+    if (!dataToSend.trim() && !selectedFile) {
+      alert('Please enter some text or select a file to send!')
       return
     }
     
-    if (!generatedCode) {
+    if (!generatedCode || !webrtcManagerRef.current) {
       alert('Please generate a code first!')
       return
     }
+
+    if (connectionStatus !== 'connected') {
+      alert('Please wait for connection to be established!')
+      return
+    }
     
-    setConnections(prev => ({
-      ...prev,
-      [generatedCode]: {
-        ...prev[generatedCode],
-        data: dataToSend,
-        status: 'sent'
+    try {
+      if (selectedFile) {
+        // Send file
+        webrtcManagerRef.current.sendFile(selectedFile)
+      } else {
+        // Send text
+        const data: WebRTCData = {
+          type: 'text',
+          content: dataToSend
+        }
+        webrtcManagerRef.current.sendData(data)
       }
-    }))
-    
-    setConnectionStatus('sent')
+      
+      setConnectionStatus('sent')
+      setTransferProgress(100)
+    } catch (error) {
+      console.error('Error sending data:', error)
+      alert('Failed to send data. Please try again.')
+    }
+  }
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      // Check file size (limit to 10MB for demo)
+      if (file.size > 10 * 1024 * 1024) {
+        alert('File size must be less than 10MB')
+        return
+      }
+      setSelectedFile(file)
+      setDataToSend('') // Clear text when file is selected
+    }
+  }
+
+  const clearFile = () => {
+    setSelectedFile(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
   }
 
   const resetConnection = () => {
+    if (webrtcManagerRef.current) {
+      webrtcManagerRef.current.close()
+    }
+    if (generatedCode) {
+      SignalingManager.clearConnection(generatedCode)
+    }
     setGeneratedCode('')
     setDataToSend('')
+    setSelectedFile(null)
     setConnectionStatus('idle')
     setCopied(false)
+    setTransferProgress(0)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
   }
 
   return (
@@ -128,20 +230,81 @@ const SendMode: React.FC = () => {
         </div>
       )}
 
+      {/* File Upload */}
+      <div className="mb-6">
+        <label className="block text-sm font-semibold text-gray-700 mb-2">
+          Select file to share (optional):
+        </label>
+        <div className="flex items-center gap-4">
+          <input
+            ref={fileInputRef}
+            type="file"
+            onChange={handleFileSelect}
+            className="hidden"
+            accept="image/*,.pdf,.doc,.docx,.txt,.zip"
+            disabled={!generatedCode}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!generatedCode}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <Upload size={20} />
+            Choose File
+          </button>
+          {selectedFile && (
+            <div className="flex items-center gap-2 text-sm">
+              {selectedFile.type.startsWith('image/') ? (
+                <Image size={16} className="text-blue-500" />
+              ) : (
+                <FileText size={16} className="text-gray-500" />
+              )}
+              <span className="text-gray-700">{selectedFile.name}</span>
+              <span className="text-gray-500">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+              <button
+                onClick={clearFile}
+                className="text-red-500 hover:text-red-700"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Data Input */}
       <div className="mb-6">
         <label htmlFor="data-input" className="block text-sm font-semibold text-gray-700 mb-2">
-          Enter text or link to share:
+          Or enter text to share:
         </label>
         <textarea
           id="data-input"
           value={dataToSend}
-          onChange={(e) => setDataToSend(e.target.value)}
+          onChange={(e) => {
+            setDataToSend(e.target.value)
+            if (selectedFile) clearFile() // Clear file when text is entered
+          }}
           className="input-field min-h-[120px] resize-none"
           placeholder="Paste your text, link, or any data here..."
-          disabled={!generatedCode}
+          disabled={!generatedCode || !!selectedFile}
         />
       </div>
+
+      {/* Transfer Progress */}
+      {transferProgress > 0 && transferProgress < 100 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+            <span>Transferring...</span>
+            <span>{transferProgress}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div 
+              className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${transferProgress}%` }}
+            ></div>
+          </div>
+        </div>
+      )}
 
       {/* Action Buttons */}
       <div className="flex gap-4">
@@ -170,9 +333,15 @@ const SendMode: React.FC = () => {
         <ol className="text-sm text-gray-600 space-y-1">
           <li>1. Click "Generate Code" to create a 6-digit code</li>
           <li>2. Share this code with the receiving device</li>
-          <li>3. Enter your text or link in the text area</li>
-          <li>4. Click "Send Data" when ready</li>
+          <li>3. Wait for "Connected" status</li>
+          <li>4. Choose a file OR enter text to share</li>
+          <li>5. Click "Send Data" to transfer directly</li>
         </ol>
+        <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+          <p className="text-xs text-blue-800">
+            <strong>🔒 Privacy:</strong> Data transfers directly between devices. No storage, no servers, completely private!
+          </p>
+        </div>
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Copy, Download, CheckCircle, AlertCircle, Clock } from 'lucide-react'
 
 interface ConnectionData {
@@ -12,7 +12,7 @@ const ReceiveMode: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'connecting' | 'connected' | 'received' | 'error'>('idle')
   const [receivedData, setReceivedData] = useState<string>('')
   const [copied, setCopied] = useState<boolean>(false)
-  const [connections, setConnections] = useState<Record<string, ConnectionData>>({})
+  const [, setConnections] = useState<Record<string, ConnectionData>>({})
 
   const connectToSender = async () => {
     if (code.length !== 6) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Copy, Send, RefreshCw, CheckCircle, Clock } from 'lucide-react'
 
 interface ConnectionData {
@@ -12,7 +12,7 @@ const SendMode: React.FC = () => {
   const [dataToSend, setDataToSend] = useState<string>('')
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'waiting' | 'connected' | 'sent'>('idle')
   const [copied, setCopied] = useState<boolean>(false)
-  const [connections, setConnections] = useState<Record<string, ConnectionData>>({})
+  const [, setConnections] = useState<Record<string, ConnectionData>>({})
 
   const generateCode = () => {
     const code = Math.floor(100000 + Math.random() * 900000).toString()

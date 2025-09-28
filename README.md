@@ -3,7 +3,7 @@
 A modern, secure web application for instant data sharing between devices using 6-digit codes. No login required, no data stored anywhere.
 
 ## 🚀 Live Demo
-Visit the live app at: [Your Vercel URL]
+Visit the live app at: https://scriboo.vercel.app/
 
 ![Scribo Preview](https://via.placeholder.com/800x400/6366f1/ffffff?text=Scribo+-+Cross-Device+Sharing)
 

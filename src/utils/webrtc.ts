@@ -187,46 +187,78 @@ export class WebRTCManager {
 
 // Simple signaling server simulation (in real app, you'd use a proper signaling server)
 export class SignalingManager {
-  private static connections: Map<string, {
+  private static getStorageKey(code: string): string {
+    return `scriboo_signaling_${code}`
+  }
+
+  private static getConnections(): Map<string, {
     offer?: string
     answer?: string
     candidates: string[]
-  }> = new Map()
+  }> {
+    const connections = new Map()
+    // Load from localStorage
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('scriboo_signaling_')) {
+        const code = key.replace('scriboo_signaling_', '')
+        try {
+          const data = JSON.parse(localStorage.getItem(key) || '{}')
+          connections.set(code, data)
+        } catch (e) {
+          // Ignore invalid data
+        }
+      }
+    }
+    return connections
+  }
+
+  private static saveConnection(code: string, data: any): void {
+    localStorage.setItem(this.getStorageKey(code), JSON.stringify(data))
+  }
 
   static async sendOffer(code: string, offer: string): Promise<void> {
-    this.connections.set(code, { offer, candidates: [] })
+    const data = { offer, candidates: [] }
+    this.saveConnection(code, data)
   }
 
   static async getOffer(code: string): Promise<string | null> {
-    const connection = this.connections.get(code)
+    const connections = this.getConnections()
+    const connection = connections.get(code)
     return connection?.offer || null
   }
 
   static async sendAnswer(code: string, answer: string): Promise<void> {
-    const connection = this.connections.get(code)
+    const connections = this.getConnections()
+    const connection = connections.get(code)
     if (connection) {
       connection.answer = answer
+      this.saveConnection(code, connection)
     }
   }
 
   static async getAnswer(code: string): Promise<string | null> {
-    const connection = this.connections.get(code)
+    const connections = this.getConnections()
+    const connection = connections.get(code)
     return connection?.answer || null
   }
 
   static async addCandidate(code: string, candidate: string): Promise<void> {
-    const connection = this.connections.get(code)
+    const connections = this.getConnections()
+    const connection = connections.get(code)
     if (connection) {
       connection.candidates.push(candidate)
+      this.saveConnection(code, connection)
     }
   }
 
   static async getCandidates(code: string): Promise<string[]> {
-    const connection = this.connections.get(code)
+    const connections = this.getConnections()
+    const connection = connections.get(code)
     return connection?.candidates || []
   }
 
   static clearConnection(code: string): void {
-    this.connections.delete(code)
+    localStorage.removeItem(this.getStorageKey(code))
   }
 }

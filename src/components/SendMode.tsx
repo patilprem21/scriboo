@@ -117,11 +117,11 @@ const SendMode: React.FC = () => {
       if (selectedFile) {
         // Send file
         webrtcManagerRef.current.sendFile(selectedFile)
-      } else {
+      } else if (dataToSend.trim()) {
         // Send text
         const data: WebRTCData = {
           type: 'text',
-          content: dataToSend
+          content: dataToSend.trim()
         }
         webrtcManagerRef.current.sendData(data)
       }
@@ -143,7 +143,6 @@ const SendMode: React.FC = () => {
         return
       }
       setSelectedFile(file)
-      setDataToSend('') // Clear text when file is selected
     }
   }
 
@@ -233,7 +232,7 @@ const SendMode: React.FC = () => {
       {/* File Upload */}
       <div className="mb-6">
         <label className="block text-sm font-semibold text-gray-700 mb-2">
-          Select file to share (optional):
+          Select file to share:
         </label>
         <div className="flex items-center gap-4">
           <input
@@ -275,18 +274,17 @@ const SendMode: React.FC = () => {
       {/* Data Input */}
       <div className="mb-6">
         <label htmlFor="data-input" className="block text-sm font-semibold text-gray-700 mb-2">
-          Or enter text to share:
+          Enter text to share:
         </label>
         <textarea
           id="data-input"
           value={dataToSend}
           onChange={(e) => {
             setDataToSend(e.target.value)
-            if (selectedFile) clearFile() // Clear file when text is entered
           }}
           className="input-field min-h-[120px] resize-none"
           placeholder="Paste your text, link, or any data here..."
-          disabled={!generatedCode || !!selectedFile}
+          disabled={!generatedCode}
         />
       </div>
 
@@ -310,7 +308,7 @@ const SendMode: React.FC = () => {
       <div className="flex gap-4">
         <button
           onClick={sendData}
-          disabled={!generatedCode || !dataToSend.trim()}
+          disabled={!generatedCode || (!dataToSend.trim() && !selectedFile)}
           className="btn-primary flex items-center gap-2 flex-1"
         >
           <Send size={20} />
@@ -334,7 +332,7 @@ const SendMode: React.FC = () => {
           <li>1. Click "Generate Code" to create a 6-digit code</li>
           <li>2. Share this code with the receiving device</li>
           <li>3. Wait for "Connected" status</li>
-          <li>4. Choose a file OR enter text to share</li>
+          <li>4. Choose a file AND/OR enter text to share</li>
           <li>5. Click "Send Data" to transfer directly</li>
         </ol>
         <div className="mt-3 p-3 bg-blue-50 rounded-lg">

@@ -17,14 +17,14 @@ export class WebRTCManager {
   private peerConnection: RTCPeerConnection | null = null
   private dataChannel: RTCDataChannel | null = null
   private callbacks: WebRTCCallbacks
-  private _isInitiator: boolean = false
+  // private _isInitiator: boolean = false
 
   constructor(callbacks: WebRTCCallbacks) {
     this.callbacks = callbacks
   }
 
   async initialize(isInitiator: boolean = false): Promise<void> {
-    this._isInitiator = isInitiator
+    // this._isInitiator = isInitiator
     
     // Create peer connection with STUN servers
     this.peerConnection = new RTCPeerConnection({

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Copy, Download, CheckCircle, AlertCircle, Clock, FileText, Image, Save } from 'lucide-react'
+import { Copy, Download, CheckCircle, AlertCircle, Clock, FileText, Image } from 'lucide-react'
 import { WebRTCManager, SignalingManager, WebRTCData } from '../utils/webrtc'
 
 const ReceiveMode: React.FC = () => {

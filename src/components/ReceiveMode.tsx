@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Copy, Download, CheckCircle, AlertCircle, Clock, FileText, Image } from 'lucide-react'
 import { WebRTCManager, WebRTCData } from '../utils/webrtc'
-import { socketSignaling } from '../utils/socketSignaling'
+import { serverlessSignaling } from '../utils/serverlessSignaling'
 
 const ReceiveMode: React.FC = () => {
   const [code, setCode] = useState<string>('')
@@ -18,8 +18,10 @@ const ReceiveMode: React.FC = () => {
       if (webrtcManagerRef.current) {
         webrtcManagerRef.current.close()
       }
-      // Cleanup Socket.IO connection
-      socketSignaling.disconnect()
+      // Cleanup signaling connection
+      if (code) {
+        serverlessSignaling.clearConnection(code)
+      }
     }
   }, [])
 
@@ -59,16 +61,18 @@ const ReceiveMode: React.FC = () => {
 
       await webrtcManagerRef.current.initialize(false)
       
-      // Wait for offer and send answer using Socket.IO
-      try {
-        await socketSignaling.waitForOfferAndSendAnswer(code, async (offer) => {
-          return await webrtcManagerRef.current!.createAnswer(offer)
-        })
-        setConnectionStatus('connected')
-      } catch (error) {
-        console.error('Error in signaling:', error)
+      // Get offer from signaling server
+      const offer = await serverlessSignaling.getOffer(code)
+      if (!offer) {
         setConnectionStatus('error')
+        return
       }
+
+      // Create answer
+      const answer = await webrtcManagerRef.current.createAnswer(offer)
+      await serverlessSignaling.sendAnswer(code, answer)
+      
+      setConnectionStatus('connected')
     } catch (error) {
       console.error('Error connecting:', error)
       setConnectionStatus('error')

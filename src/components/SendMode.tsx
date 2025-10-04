@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Copy, Send, RefreshCw, CheckCircle, Clock, Upload, FileText, Image } from 'lucide-react'
 import { WebRTCManager, WebRTCData } from '../utils/webrtc'
-import { socketSignaling } from '../utils/socketSignaling'
+import { serverlessSignaling } from '../utils/serverlessSignaling'
 
 const SendMode: React.FC = () => {
   const [generatedCode, setGeneratedCode] = useState<string>('')
@@ -20,8 +20,10 @@ const SendMode: React.FC = () => {
       if (webrtcManagerRef.current) {
         webrtcManagerRef.current.close()
       }
-      // Cleanup Socket.IO connection
-      socketSignaling.disconnect()
+      // Cleanup signaling connection
+      if (generatedCode) {
+        serverlessSignaling.clearConnection(generatedCode)
+      }
     }
   }, [])
 
@@ -56,21 +58,42 @@ const SendMode: React.FC = () => {
       await webrtcManagerRef.current.initialize(true)
       const offer = await webrtcManagerRef.current.createOffer()
       
-      // Send offer and wait for answer using Socket.IO
-      try {
-        const answer = await socketSignaling.sendOfferAndWaitForAnswer(code, offer)
-        await webrtcManagerRef.current.setAnswer(answer)
-        setConnectionStatus('connected')
-      } catch (error) {
-        console.error('Error in signaling:', error)
-        setConnectionStatus('idle')
-      }
+      // Send offer using serverless signaling
+      await serverlessSignaling.sendOffer(code, offer)
+      setConnectionStatus('waiting')
+      
+      // Start polling for answer
+      pollForAnswer(code)
     } catch (error) {
       console.error('Error initializing WebRTC:', error)
       setConnectionStatus('idle')
     }
   }
 
+  const pollForAnswer = async (code: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const answer = await serverlessSignaling.getAnswer(code)
+        if (answer && webrtcManagerRef.current) {
+          clearInterval(pollInterval)
+          await webrtcManagerRef.current.setAnswer(answer)
+          setConnectionStatus('connected')
+        }
+      } catch (error) {
+        console.error('Error polling for answer:', error)
+        clearInterval(pollInterval)
+        setConnectionStatus('idle')
+      }
+    }, 1000)
+
+    // Stop polling after 2 minutes
+    setTimeout(() => {
+      clearInterval(pollInterval)
+      if (connectionStatus === 'waiting') {
+        setConnectionStatus('idle')
+      }
+    }, 120000)
+  }
 
   const copyCode = async () => {
     try {
@@ -143,7 +166,7 @@ const SendMode: React.FC = () => {
       webrtcManagerRef.current.close()
     }
     if (generatedCode) {
-      socketSignaling.clearConnection(generatedCode)
+      serverlessSignaling.clearConnection(generatedCode)
     }
     setGeneratedCode('')
     setDataToSend('')

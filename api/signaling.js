@@ -46,7 +46,7 @@ module.exports = (req, res) => {
     req.on('end', () => {
       try {
         const data = JSON.parse(body)
-        const { action, code, offer, answer } = data
+        const { action, code, offer, answer, candidate } = data
 
         switch (action) {
           case 'send-offer':
@@ -82,6 +82,29 @@ module.exports = (req, res) => {
               res.status(200).json({ success: true, answer: connectionWithAnswer.answer })
             } else {
               res.status(404).json({ success: false, message: 'Answer not found' })
+            }
+            break
+
+          case 'send-ice-candidate':
+            const connWithCandidate = connections.get(code)
+            if (connWithCandidate) {
+              if (!connWithCandidate.iceCandidates) {
+                connWithCandidate.iceCandidates = []
+              }
+              connWithCandidate.iceCandidates.push(candidate)
+              res.status(200).json({ success: true, code })
+            } else {
+              res.status(404).json({ success: false, message: 'Connection not found' })
+            }
+            break
+
+          case 'get-ice-candidate':
+            const connectionWithCandidates = connections.get(code)
+            if (connectionWithCandidates && connectionWithCandidates.iceCandidates && connectionWithCandidates.iceCandidates.length > 0) {
+              const candidate = connectionWithCandidates.iceCandidates.shift() // Get and remove first candidate
+              res.status(200).json({ success: true, candidate })
+            } else {
+              res.status(404).json({ success: false, message: 'No ICE candidates found' })
             }
             break
 

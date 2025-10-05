@@ -49,6 +49,14 @@ export class WebRTCManager {
       }
     }
 
+    // Handle ICE candidates
+    this.peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log('ICE candidate generated:', event.candidate)
+        // ICE candidates will be handled by the signaling layer
+      }
+    }
+
     if (isInitiator) {
       // Create data channel for sending data
       this.dataChannel = this.peerConnection.createDataChannel('data', {
@@ -125,14 +133,6 @@ export class WebRTCManager {
     await this.peerConnection.setRemoteDescription(answerObj)
   }
 
-  async addIceCandidate(candidate: string): Promise<void> {
-    if (!this.peerConnection) {
-      throw new Error('Peer connection not initialized')
-    }
-
-    const candidateObj = JSON.parse(candidate)
-    await this.peerConnection.addIceCandidate(candidateObj)
-  }
 
   sendData(data: WebRTCData): void {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
@@ -182,6 +182,25 @@ export class WebRTCManager {
 
   getConnectionState(): string {
     return this.peerConnection?.connectionState || 'disconnected'
+  }
+
+  // Add ICE candidate
+  async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
+    if (!this.peerConnection) {
+      throw new Error('Peer connection not initialized')
+    }
+    await this.peerConnection.addIceCandidate(candidate)
+  }
+
+  // Get ICE candidates (for signaling)
+  onIceCandidate(callback: (candidate: RTCIceCandidateInit) => void): void {
+    if (this.peerConnection) {
+      this.peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          callback(event.candidate)
+        }
+      }
+    }
   }
 }
 

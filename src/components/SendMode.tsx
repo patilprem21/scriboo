@@ -56,6 +56,12 @@ const SendMode: React.FC = () => {
       })
 
       await webrtcManagerRef.current.initialize(true)
+      
+      // Set up ICE candidate handling
+      webrtcManagerRef.current.onIceCandidate((candidate) => {
+        serverlessSignaling.sendIceCandidate(code, candidate)
+      })
+      
       const offer = await webrtcManagerRef.current.createOffer()
       
       // Send offer using serverless signaling
@@ -77,6 +83,10 @@ const SendMode: React.FC = () => {
         if (answer && webrtcManagerRef.current) {
           clearInterval(pollInterval)
           await webrtcManagerRef.current.setAnswer(answer)
+          
+          // Start polling for ICE candidates
+          pollForIceCandidates(code)
+          
           setConnectionStatus('connected')
         }
       } catch (error) {
@@ -93,6 +103,25 @@ const SendMode: React.FC = () => {
         setConnectionStatus('idle')
       }
     }, 120000)
+  }
+
+  const pollForIceCandidates = async (code: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const candidate = await serverlessSignaling.getIceCandidate(code)
+        if (candidate && webrtcManagerRef.current) {
+          await webrtcManagerRef.current.addIceCandidate(candidate)
+        }
+      } catch (error) {
+        console.error('Error polling for ICE candidates:', error)
+        clearInterval(pollInterval)
+      }
+    }, 1000)
+
+    // Stop polling after 30 seconds
+    setTimeout(() => {
+      clearInterval(pollInterval)
+    }, 30000)
   }
 
   const copyCode = async () => {

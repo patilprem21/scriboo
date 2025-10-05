@@ -60,6 +60,23 @@ export class ServerlessSignaling {
     }
   }
 
+  static async sendIceCandidate(code: string, candidate: any): Promise<void> {
+    try {
+      await this.makeRequest('send-ice-candidate', { code, candidate })
+    } catch (error) {
+      console.error('Failed to send ICE candidate:', error)
+    }
+  }
+
+  static async getIceCandidate(code: string): Promise<any | null> {
+    try {
+      const result = await this.makeRequest('get-ice-candidate', { code })
+      return result.success ? result.candidate : null
+    } catch (error) {
+      return null
+    }
+  }
+
   static async clearConnection(code: string): Promise<void> {
     try {
       await this.makeRequest('clear-connection', { code })

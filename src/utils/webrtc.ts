@@ -73,27 +73,31 @@ export class WebRTCManager {
   }
 
   private setupDataChannel(channel: RTCDataChannel): void {
+    console.log('Setting up data channel, readyState:', channel.readyState)
+    
     channel.onopen = () => {
-      console.log('Data channel opened')
+      console.log('✅ Data channel opened successfully!')
       this.callbacks.onConnectionStateChange('connected')
     }
 
     channel.onclose = () => {
-      console.log('Data channel closed')
+      console.log('❌ Data channel closed')
       this.callbacks.onConnectionStateChange('closed')
     }
 
     channel.onerror = (error) => {
-      console.error('Data channel error:', error)
+      console.error('❌ Data channel error:', error)
       this.callbacks.onError('Data channel error')
     }
 
     channel.onmessage = (event) => {
+      console.log('📨 Data received through WebRTC:', event.data)
       try {
         const data = JSON.parse(event.data)
+        console.log('📨 Parsed data:', data)
         this.callbacks.onDataReceived(data)
       } catch (error) {
-        console.error('Error parsing received data:', error)
+        console.error('❌ Error parsing received data:', error)
         this.callbacks.onError('Invalid data received')
       }
     }
@@ -135,15 +139,22 @@ export class WebRTCManager {
 
 
   sendData(data: WebRTCData): void {
+    console.log('📤 Attempting to send data:', data)
+    console.log('📤 Data channel state:', this.dataChannel?.readyState)
+    
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+      console.error('❌ Data channel not ready, state:', this.dataChannel?.readyState)
       this.callbacks.onError('Data channel not ready')
       return
     }
 
     try {
-      this.dataChannel.send(JSON.stringify(data))
+      const dataString = JSON.stringify(data)
+      console.log('📤 Sending data string:', dataString)
+      this.dataChannel.send(dataString)
+      console.log('✅ Data sent successfully!')
     } catch (error) {
-      console.error('Error sending data:', error)
+      console.error('❌ Error sending data:', error)
       this.callbacks.onError('Failed to send data')
     }
   }

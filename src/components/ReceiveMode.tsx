@@ -67,15 +67,20 @@ const ReceiveMode: React.FC = () => {
       })
       
       // Get offer from signaling server
+      console.log('Getting offer for code:', code)
       const offer = await serverlessSignaling.getOffer(code)
       if (!offer) {
+        console.log('No offer found for code:', code)
         setConnectionStatus('error')
         return
       }
 
+      console.log('Offer received, creating answer')
       // Create answer
       const answer = await webrtcManagerRef.current.createAnswer(offer)
+      console.log('Answer created, sending to signaling server')
       await serverlessSignaling.sendAnswer(code, answer)
+      console.log('Answer sent successfully')
       
       // Start polling for ICE candidates
       pollForIceCandidates(code)

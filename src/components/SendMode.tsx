@@ -65,7 +65,9 @@ const SendMode: React.FC = () => {
       const offer = await webrtcManagerRef.current.createOffer()
       
       // Send offer using serverless signaling
+      console.log('Sending offer for code:', code)
       await serverlessSignaling.sendOffer(code, offer)
+      console.log('Offer sent successfully')
       setConnectionStatus('waiting')
       
       // Start polling for answer
@@ -77,10 +79,13 @@ const SendMode: React.FC = () => {
   }
 
   const pollForAnswer = async (code: string) => {
+    console.log('Starting to poll for answer with code:', code)
     const pollInterval = setInterval(async () => {
       try {
+        console.log('Polling for answer...')
         const answer = await serverlessSignaling.getAnswer(code)
         if (answer && webrtcManagerRef.current) {
+          console.log('Answer received, setting up connection')
           clearInterval(pollInterval)
           await webrtcManagerRef.current.setAnswer(answer)
           

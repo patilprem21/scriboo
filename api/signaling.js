@@ -1,7 +1,4 @@
 // Serverless function for signaling - works better with Vercel
-const { createServer } = require('http')
-const { Server } = require('socket.io')
-
 // Store connections in memory (will reset on serverless function restart)
 const connections = new Map()
 

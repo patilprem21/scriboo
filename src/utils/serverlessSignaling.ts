@@ -69,5 +69,5 @@ export class ServerlessSignaling {
   }
 }
 
-// Export singleton instance
-export const serverlessSignaling = new ServerlessSignaling()
+// Export the class directly since all methods are static
+export const serverlessSignaling = ServerlessSignaling

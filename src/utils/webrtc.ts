@@ -185,5 +185,5 @@ export class WebRTCManager {
   }
 }
 
-// Use the new SignalingServer for cross-device communication
-export { SignalingServer as SignalingManager } from './signaling'
+// Use the new ServerlessSignaling for cross-device communication
+export { ServerlessSignaling as SignalingManager } from './serverlessSignaling'
